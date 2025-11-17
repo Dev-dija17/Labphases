@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="style.css">
+    <title>Authentication</title>
+  </head>
+  <body>
+    <h1 id="title">Login</h1>
+<div id="loginForm">
+    <input id="email" type="email" />
+    <input id="password" type="password" />
+    <button onclick="login()">LOGIN</button>
+</div>
+<script>
+    
+    let users = [
+        { email: "hakimi@email.com", password: "123" },
+        { email: "admin@app.com", password: "ADMIN" }
+    ];
+
+    function login() {
+        
+        const inputEmail = document.getElementById("email").value;
+        const inputPassword = document.getElementById("password").value;
+
+        //Find the user in the array
+        const foundUser = users.find(user => user.email === inputEmail);
+
+        //Check if user was found AND if password matches
+        if (foundUser && foundUser.password === inputPassword) {
+            
+            window.location.href = './home.html';
+        } else {
+            
+            alert("Invalid email or password. Try again.");
+        }
+    }
+</script>

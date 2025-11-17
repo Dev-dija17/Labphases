@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Book Library System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="min-h-screen">
+
+    <div class="container">
+        <header>
+            <h1>My Shelf in the Cloud</h1>
+            <p>Organize your books, rate them, and follow your reading progress.</p>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="main-grid">
+
+            <!-- 1. Add Book Form (Sidebar) -->
+            <div class="card">
+                <h2>Add a New Book</h2>
+                <form id="new-book-form">
+                    <!-- Title -->
+                    <div class="form-group">
+                        <label for="title">Title</label>
+                        <input type="text" id="title" required>
+                    </div>
+
+                    <!-- Author -->
+                    <div class="form-group">
+                        <label for="author">Author</label>
+                        <input type="text" id="author" required>
+                    </div>
+
+                    <!-- ISBN (Optional) -->
+                    <div class="form-group">
+                        <label for="isbn">ISBN (Optional)</label>
+                        <input type="text" id="isbn">
+                    </div>
+
+                    <!-- Status -->
+                    <div class="form-group" style="margin-bottom: 1.5rem;">
+                        <label for="status">Status</label>
+                        <select id="status" required>
+                            <option value="To Read">To Read</option>
+                            <option value="Reading">Reading</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn-primary">
+                        Add Book to Library
+                    </button>
+                    <!-- Message box for errors or success notifications -->
+                    <p id="message-box" class="message-box"></p>
+                </form>
+            </div>
+
+            <!-- 2. Library Display (Main Area) -->
+            <div class="card" style="grid-column: span 1 / span 4;">
+                <h2>Your Collection</h2>
+
+                <!-- Filter Controls -->
+                <div class="filter-controls">
+                    <button onclick="setFilter('All')" class="filter-btn" data-filter="All">All Books</button>
+                    <button onclick="setFilter('To Read')" class="filter-btn" data-filter="To Read">To Read</button>
+                    <button onclick="setFilter('Reading')" class="filter-btn" data-filter="Reading">Reading</button>
+                    <button onclick="setFilter('Completed')" class="filter-btn" data-filter="Completed">Completed</button>
+                </div>
+
+                <!-- Book List Container -->
+                <div id="library-container" class="library-container">
+                    <!-- Books will be inserted here by JavaScript -->
+                </div>
+                <!-- MESSAGE ELEMENT MOVED OUTSIDE of #library-container -->
+                <p class="no-books-message" id="no-books-message">Your library is empty! Add a book to get started.</p>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- JavaScript Logic (Vanilla JS) -->
+    <script>
+        // --- 1. STATE VARIABLES AND INITIALIZATION ---
+        // Global array (variable) to store book objects
+        let myLibrary = [];
+        // Variable to track the current filter status
+        let currentFilter = 'All';
+
+        // DOM elements
+        const libraryContainer = document.getElementById('library-container');
+        const form = document.getElementById('new-book-form');
+        const messageBox = document.getElementById('message-box');
+        
+        /**
+         * The Book Constructor Function.
+         * Creates a new book object with a unique ID.
+         * @param {string} title
+         * @param {string} author
+         * @param {string} isbn
+         * @param {string} status - 'To Read', 'Reading', or 'Completed'
+         * @param {number} rating - 0 to 5 (0 is default/unrated)
+         */
+        function Book(title, author, isbn, status, rating = 0) {
+            // Auto-generated unique ID using Date.now() and Math.random()
+            this.id = Date.now().toString(36) + Math.random().toString(36).substring(2);
+            this.title = title;
+            this.author = author;
+            this.isbn = isbn;
+            this.status = status;
+            this.rating = rating;
+        }
+
+
+        // --- 2. PERSISTENCE FUNCTIONS (using simple localStorage) ---
+
+        /**
+         * Loads the library data from localStorage.
+         */
+        function loadLibrary() {
+            try {
+                const storedLibrary = localStorage.getItem('myLibrary');
+                if (storedLibrary) {
+                    // Parse the stored JSON back into the myLibrary array
+                    myLibrary = JSON.parse(storedLibrary);
+                }
+            } catch (error) {
+                console.error("Error loading library from localStorage:", error);
+                messageBox.textContent = "Error: Could not load local storage data. App is running in memory only.";
+            }
+
+            renderLibrary(); // Render the loaded books
+        }
+
+        /**
+         * Saves the current myLibrary array to localStorage.
+         */
+        function saveLibrary() {
+            try {
+                localStorage.setItem('myLibrary', JSON.stringify(myLibrary));
+            } catch (error) {
+                console.error("Error saving library to localStorage:", error);
+                messageBox.textContent = "Error: Could not save data. Changes may be lost.";
+            }
+        }
+
+
+        // --- 3. CRUD FUNCTIONS ---
+
+        /**
+         * Adds a new book object to the library array (CREATE).
+         * @param {Book} book - The book object to add.
+         */
+        function addBookToLibrary(book) {
+            myLibrary.push(book);
+            saveLibrary();
+            // Re-render to show the new book immediately
+            renderLibrary(book.id); // Pass the ID of the new book to trigger animation
+        }
+
+        /**
+         * Finds a book by ID and removes it from the array (DELETE).
+         * @param {string} id - The unique ID of the book to delete.
+         */
+        function deleteBook(id) {
+            // NOTE: We are using window.confirm() here as a simple replacement for a custom modal,
+            // as alerts/confirms should generally be avoided in production iframes.
+            const deleteConfirmed = window.confirm("Are you sure you want to delete this book?");
+            if (!deleteConfirmed) return;
+
+            // Find the element to animate the removal
+            const cardToRemove = document.querySelector(`.book-card[data-id="${id}"]`);
+            if (cardToRemove) {
+                // Apply fade out effect
+                cardToRemove.style.opacity = '0';
+                cardToRemove.style.transform = 'translateY(-20px)';
+                
+                // Use a timeout to wait for the animation to finish before removing from DOM/data
+                setTimeout(() => {
+                    // Filter out the book with the matching ID
+                    myLibrary = myLibrary.filter(book => book.id !== id);
+                    saveLibrary();
+                    renderLibrary(); // Re-render the rest of the list
+                    messageBox.textContent = "Book successfully removed.";
+                    setTimeout(() => messageBox.textContent = '', 3000);
+                }, 300); // Duration matches the CSS transition time
+            }
+        }
+
+        /**
+         * Finds a book by ID and toggles its status (UPDATE).
+         * @param {string} id - The unique ID of the book.
+         */
+        function toggleStatus(id) {
+            const bookIndex = myLibrary.findIndex(book => book.id === id);
+            if (bookIndex > -1) {
+                const currentStatus = myLibrary[bookIndex].status;
+                switch (currentStatus) {
+                    case 'To Read':
+                        myLibrary[bookIndex].status = 'Reading';
+                        break;
+                    case 'Reading':
+                        myLibrary[bookIndex].status = 'Completed';
+                        break;
+                    case 'Completed':
+                        myLibrary[bookIndex].status = 'To Read';
+                        // Reset rating if going back to 'To Read'
+                        myLibrary[bookIndex].rating = 0;
+                        break;
+                }
+                saveLibrary();
+                renderLibrary();
+            }
+        }
+
+        /**
+         * Finds a book by ID and updates its rating (UPDATE).
+         * @param {string} id - The unique ID of the book.
+         * @param {number} newRating - The new rating (1-5).
+         */
+        function updateRating(id, newRating) {
+            const book = myLibrary.find(book => book.id === id);
+            if (book) {
+                // Only allow rating if the book is completed
+                if (book.status === 'Completed') {
+                    book.rating = newRating;
+                    saveLibrary();
+                    renderLibrary();
+                } else {
+                    messageBox.textContent = "You can only rate a 'Completed' book.";
+                    setTimeout(() => messageBox.textContent = '', 3000);
+                }
+            }
+        }
+
+
+        // --- 4. UI RENDER FUNCTIONS (READ) ---
+
+        /**
+         * Creates the star rating UI for a book using inline SVGs and custom classes.
+         * @param {string} bookId
+         * @param {number} currentRating
+         * @returns {string} HTML string for stars.
+         */
+        function createRatingHTML(bookId, currentRating) {
+            let starsHtml = '';
+            for (let i = 1; i <= 5; i++) {
+                const isFilled = i <= currentRating;
+                const starClass = isFilled ? 'star-filled' : 'star-empty';
+                // Inline SVG star icon
+                starsHtml += `
+                    <svg onclick="updateRating('${bookId}', ${i})"
+                        class="star ${starClass}"
+                        fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.381-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>`;
+            }
+            return starsHtml;
+        }
+
+        /**
+         * Creates the HTML card structure for a single book.
+         * @param {Book} book - The book object.
+         * @param {boolean} shouldAnimate - If true, adds the animation class.
+         * @returns {string} HTML string for the book card.
+         */
+        function renderBookCard(book, shouldAnimate) {
+            let statusBadgeClass = `status-${book.status.replace(/\s/g, '-')}`;
+            let statusButtonClass = '';
+            let buttonText = '';
+
+            // Set dynamic classes and text based on book status
+            switch (book.status) {
+                case 'To Read':
+                    statusButtonClass = 'status-btn-yellow';
+                    buttonText = 'Start Reading';
+                    break;
+                case 'Reading':
+                    statusButtonClass = 'status-btn-blue';
+                    buttonText = 'Mark as Completed';
+                    break;
+                case 'Completed':
+                    statusButtonClass = 'status-btn-green';
+                    buttonText = 'Set to To Read';
+                    break;
+            }
+
+            // Determine what to show for rating
+            const ratingHtml = book.status === 'Completed' ? createRatingHTML(book.id, book.rating) : `<span class="rating-placeholder">Rate after completion</span>`;
+            
+            // Apply animation class if requested
+            const animationClass = shouldAnimate ? 'animate-entry' : '';
+
+            return `
+                <div class="book-card ${animationClass}" data-id="${book.id}">
+                    <div class="book-info">
+                        <div class="book-status-title">
+                            <span class="status-badge ${statusBadgeClass}">${book.status}</span>
+                            <h3 class="book-title">${book.title}</h3>
+                        </div>
+                        <p class="book-author">by ${book.author}</p>
+                        ${book.isbn ? `<p class="book-isbn">ISBN: ${book.isbn}</p>` : ''}
+                        <div class="book-rating">
+                            <span class="rating-label">Rating:</span>
+                            ${ratingHtml}
+                        </div>
+                    </div>
+
+                    <div class="book-actions">
+                        <!-- Toggle Status Button -->
+                        <button onclick="toggleStatus('${book.id}')"
+                            class="action-btn ${statusButtonClass}">
+                            ${buttonText}
+                        </button>
+                        <!-- Delete Button -->
+                        <button onclick="deleteBook('${book.id}')"
+                            class="action-btn delete-btn">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+
+        /**
+         * Renders the entire library based on the current filter (READ).
+         * @param {string | null} newBookId - The ID of a newly added book to animate.
+         */
+        function renderLibrary(newBookId = null) {
+            // Filter the books based on the global currentFilter variable
+            const filteredBooks = myLibrary.filter(book => {
+                return currentFilter === 'All' || book.status === currentFilter;
+            });
+
+            // Clear the container before rendering
+            libraryContainer.innerHTML = '';
+
+            // Get the no-books-message element (it is now safe from innerHTML = '')
+            const noBooksMessage = document.getElementById('no-books-message');
+
+            // Handle empty library state
+            if (myLibrary.length === 0) {
+                noBooksMessage.textContent = "Your library is empty! Add a book to get started.";
+                noBooksMessage.style.display = 'block';
+                return;
+            } else if (filteredBooks.length === 0) {
+                noBooksMessage.textContent = `No books found in the '${currentFilter}' category.`;
+                noBooksMessage.style.display = 'block';
+            } else {
+                noBooksMessage.style.display = 'none';
+            }
+
+            // Render each filtered book by injecting its HTML card
+            filteredBooks.forEach(book => {
+                // Only animate the card if its ID matches the newBookId
+                const shouldAnimate = book.id === newBookId;
+                libraryContainer.innerHTML += renderBookCard(book, shouldAnimate);
+            });
+        }
+
+        /**
+         * Sets the current filter and re-renders the library.
+         * @param {string} filter - 'All', 'To Read', 'Reading', or 'Completed'.
+         */
+        function setFilter(filter) {
+            currentFilter = filter;
+            // Update button styles to show which filter is active
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                const isSelected = btn.getAttribute('data-filter') === filter;
+                if (isSelected) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            renderLibrary();
+        }
+
+        // --- 5. INITIAL SETUP AND EVENT LISTENERS ---
+
+        /**
+         * Handles the form submission for adding a new book.
+         * @param {Event} e - The form submit event.
+         */
+        function handleFormSubmit(e) {
+            e.preventDefault();
+
+            // Get values from the form inputs
+            const title = document.getElementById('title').value.trim();
+            const author = document.getElementById('author').value.trim();
+            const isbn = document.getElementById('isbn').value.trim();
+            const status = document.getElementById('status').value;
+
+            const newBook = new Book(title, author, isbn, status);
+            addBookToLibrary(newBook);
+
+            // Clear form and display success
+            form.reset();
+            messageBox.textContent = `"${title}" successfully added!`;
+            setTimeout(() => messageBox.textContent = '', 3000);
+        }
+
+        // Attach event listener to the form
+        form.addEventListener('submit', handleFormSubmit);
+
+        // Initial loading of the library when the page loads
+        window.onload = loadLibrary;
+
+        // Set the initial style for the 'All' filter button when the DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+             setFilter('All');
+        });
+
+    </script>
+</body>
+</html>
